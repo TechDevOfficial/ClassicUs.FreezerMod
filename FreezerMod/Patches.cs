@@ -184,7 +184,11 @@ namespace ClassicUs.FreezerMod
     [HarmonyPatch(typeof(RoleBehaviour), nameof(RoleBehaviour.OnAssign))]
     internal static class RoleBehaviour_OnAssign_Patch
     {
-        private static void Postfix(RoleBehaviour __instance, PlayerControl player)
+        private static void Prefix(RoleBehaviour __instance, PlayerControl player) => Apply(__instance);
+
+        private static void Postfix(RoleBehaviour __instance, PlayerControl player) => Apply(__instance);
+
+        private static void Apply(RoleBehaviour __instance)
         {
             if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return;
             var client = AmongUsClient.Instance;
@@ -298,6 +302,27 @@ namespace ClassicUs.FreezerMod
             catch (Exception e)
             {
                 FreezerPlugin.Log.LogError("ExileController.Begin Freezer text patch: " + e);
+            }
+        }
+    }
+
+    [HarmonyPatch(typeof(ExileController._Animate_d__17), nameof(ExileController._Animate_d__17.MoveNext))]
+    internal static class ExileController_Animate_MoveNext_Patch
+    {
+        private static void Postfix(ExileController._Animate_d__17 __instance)
+        {
+            var ctrl = __instance == null ? null : __instance.__4__this;
+            if (ctrl == null || ctrl.exiled == null) return;
+            try
+            {
+                var role = ctrl.exiled.myRole;
+                if (role == null || role.SafeTryCast<FreezerRole>() == null) return;
+
+                ctrl.completeString = $"{ctrl.exiled.PlayerName} was the Freezer.";
+            }
+            catch (Exception e)
+            {
+                FreezerPlugin.Log.LogError("ExileController.Animate Freezer text patch: " + e);
             }
         }
     }
