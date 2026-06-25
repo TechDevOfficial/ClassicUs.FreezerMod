@@ -341,6 +341,7 @@ namespace ClassicUs.FreezerMod
                 if (comp.TryCast<PassiveButton>() != null) continue;
                 if (comp.TryCast<TextMeshPro>() != null) continue;
                 if (comp.TryCast<AspectPosition>() != null) continue;
+                comp.enabled = false;
                 UnityEngine.Object.Destroy(comp);
             }
 
