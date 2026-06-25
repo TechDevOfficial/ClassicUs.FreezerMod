@@ -234,6 +234,28 @@ namespace ClassicUs.FreezerMod
         }
     }
 
+    [HarmonyPatch(typeof(ExileController), nameof(ExileController.Begin))]
+    internal static class ExileController_Begin_Patch
+    {
+        private static void Postfix(ExileController __instance, GameData.PlayerInfo exiled, bool tie)
+        {
+            if (__instance == null || exiled == null) return;
+            try
+            {
+                var role = exiled.myRole;
+                if (role == null || role.SafeTryCast<FreezerRole>() == null) return;
+
+                string text = $"{exiled.PlayerName} was the Freezer.";
+                if (__instance.Text != null) __instance.Text.Text = text;
+                __instance.completeString = text;
+            }
+            catch (Exception e)
+            {
+                FreezerPlugin.Log.LogError("ExileController.Begin Freezer text patch: " + e);
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(IntroCutscene), nameof(IntroCutscene.GetTeamColor))]
     internal static class IntroCutscene_GetTeamColor_Patch
     {

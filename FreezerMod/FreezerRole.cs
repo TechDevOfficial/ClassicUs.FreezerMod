@@ -2,7 +2,7 @@ using System;
 
 namespace ClassicUs.FreezerMod
 {
-    public class FreezerRole : RoleBehaviour
+    public class FreezerRole : ImpostorRole
     {
         public FreezerRole(IntPtr ptr) : base(ptr) { }
     }
