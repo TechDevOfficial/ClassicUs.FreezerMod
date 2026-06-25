@@ -244,6 +244,23 @@ namespace ClassicUs.FreezerMod
         }
     }
 
+    [HarmonyPatch(typeof(IntroCutscene._BeginTeam_d__18), nameof(IntroCutscene._BeginTeam_d__18.MoveNext))]
+    internal static class IntroCutscene_BeginTeam_MoveNext_Patch
+    {
+        private static void Postfix(IntroCutscene._BeginTeam_d__18 __instance, ref bool __result)
+        {
+            if (!__result || __instance == null || __instance.__4__this == null) return;
+
+            var local = PlayerControl.LocalPlayer;
+            if (local != null && FreezerPlugin.IsFreezer(local))
+            {
+                __instance.__4__this.Title.text = "Freezer";
+                __instance.__4__this.Title.color = new Color(0.3f, 0.7f, 1f, 1f);
+                __instance.__4__this.DescriptionText.text = "You are a Freezer. Press the freeze button to freeze every player for a few seconds.";
+            }
+        }
+    }
+
     internal static class FreezeButton
     {
         private static GameObject _buttonGo;
