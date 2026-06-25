@@ -16,7 +16,7 @@
 
   <ItemGroup>
     <PackageReference Include="ClassicUs.GameLibs" Version="2026.5.27.1" PrivateAssets="all" />
-    <PackageReference Include="ClassicUs.Manactor" Version="1.0.13" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="ClassicUs.Manactor" Version="1.0.14" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 
   <ItemGroup>

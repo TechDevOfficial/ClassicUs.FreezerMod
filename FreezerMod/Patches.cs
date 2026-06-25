@@ -611,7 +611,7 @@ namespace ClassicUs.FreezerMod
             var template = menu.keyvaluePrefab;
             if (template == null) return;
 
-            _injectedCount = 0;
+            _injectedCount = ManactorAPI.ReserveSettingsRows(menu.GetInstanceID(), 5);
 
             InjectToggle(menu, parent, template, "FreezerToggle", "Enable Freezer",
                 () => {
@@ -677,7 +677,7 @@ namespace ClassicUs.FreezerMod
                     }
                 });
 
-            InjectNumeric(menu, parent, template, "FreezerRoleChance", "Freezer Role Chance", 10f, 0f, 100f, "0%",
+            InjectNumeric(menu, parent, template, "FreezerRoleChance", "Freezer Role Chance", 10f, 0f, 100f, "0\\%",
                 () => {
                     if (AmongUsClient.Instance != null && AmongUsClient.Instance.AmHost)
                         return FreezerPlugin.CfgRoleChance.Value;
@@ -727,7 +727,7 @@ namespace ClassicUs.FreezerMod
                     durationText.text = FreezerPlugin.ActiveFreezeDuration.ToString("0s");
 
                 if (_valueTexts.TryGetValue("FreezerRoleChance", out var chanceText) && chanceText != null)
-                    chanceText.text = FreezerPlugin.ActiveRoleChance.ToString("0%");
+                    chanceText.text = FreezerPlugin.ActiveRoleChance.ToString("0\\%");
             }
             catch (Exception e)
             {
