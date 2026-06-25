@@ -187,6 +187,8 @@ namespace ClassicUs.FreezerMod
         private static void Postfix(RoleBehaviour __instance, PlayerControl player)
         {
             if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return;
+            var client = AmongUsClient.Instance;
+            if (client != null && client.GameMode == GameModes.FreePlay) return;
             try
             {
                 __instance.RoleTeamType = RoleTeamTypes.Impostor;
