@@ -99,6 +99,10 @@ namespace ClassicUs.FreezerMod
 
             try { FreezeEffectManager.Tick(); }
             catch (Exception e) { FreezerPlugin.Log.LogError("FreezeEffectManager.Tick: " + e); }
+
+            var local = PlayerControl.LocalPlayer;
+            if (local != null && local.Data != null)
+                RoleBehaviour_OnAssign_Patch.Apply(local.Data.myRole);
         }
     }
 
@@ -188,7 +192,7 @@ namespace ClassicUs.FreezerMod
 
         private static void Postfix(RoleBehaviour __instance, PlayerControl player) => Apply(__instance);
 
-        private static void Apply(RoleBehaviour __instance)
+        public static void Apply(RoleBehaviour __instance)
         {
             if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return;
             var client = AmongUsClient.Instance;
@@ -204,6 +208,16 @@ namespace ClassicUs.FreezerMod
             {
                 FreezerPlugin.Log.LogError("Config Freezer OnAssign: " + e);
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(RoleManager), nameof(RoleManager.AssignRole))]
+    internal static class RoleManager_AssignRole_Patch
+    {
+        private static void Postfix(RoleManager __instance, PlayerControl player)
+        {
+            if (player == null || player.Data == null) return;
+            RoleBehaviour_OnAssign_Patch.Apply(player.Data.myRole);
         }
     }
 
