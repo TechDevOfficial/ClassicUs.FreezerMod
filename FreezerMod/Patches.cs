@@ -137,6 +137,50 @@ namespace ClassicUs.FreezerMod
         }
     }
 
+    [HarmonyPatch(typeof(RoleBehaviour), nameof(RoleBehaviour.SetTarget))]
+    internal static class RoleBehaviour_SetTarget_Patch
+    {
+        private const float KillRange = 2.5f;
+
+        private static bool Prefix(RoleBehaviour __instance)
+        {
+            var local = PlayerControl.LocalPlayer;
+            if (local == null || local.Data == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
+
+            var killButton = HudManager.InstanceExists ? HudManager.Instance.KillButton : null;
+            if (killButton == null) return false;
+
+            try
+            {
+                PlayerControl best = null;
+                float bestDist = KillRange;
+                var localPos = local.GetTruePosition();
+
+                foreach (var p in PlayerControl.AllPlayerControls)
+                {
+                    if (p == null || p == local || p.Data == null) continue;
+                    if (p.Data.IsDead || p.Data.Disconnected) continue;
+                    if (RoleManager.IsTeam(p.Data, RoleTeamTypes.Impostor)) continue;
+
+                    float dist = Vector2.Distance(localPos, p.GetTruePosition());
+                    if (dist < bestDist)
+                    {
+                        bestDist = dist;
+                        best = p;
+                    }
+                }
+
+                killButton.CurrentTarget = best;
+            }
+            catch (Exception e)
+            {
+                FreezerPlugin.Log.LogError("Freezer SetTarget: " + e);
+            }
+
+            return false;
+        }
+    }
+
     [HarmonyPatch(typeof(RoleBehaviour), nameof(RoleBehaviour.OnAssign))]
     internal static class RoleBehaviour_OnAssign_Patch
     {
