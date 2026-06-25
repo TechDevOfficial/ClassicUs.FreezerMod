@@ -9,18 +9,19 @@ using Il2CppInterop.Runtime.Injection;
 
 namespace ClassicUs.FreezerMod
 {
-    [BepInPlugin(Guid, "Classic Us Freezer", "1.0.0")]
+    [BepInPlugin(Guid, "Classic Us Freezer", "1.0.1")]
     [BepInDependency(ManactorPlugin.Guid)]
     public class FreezerPlugin : BasePlugin
     {
         public const string Guid = "classicus.freezer";
-        public const string Version = "1.0.0";
+        public const string Version = "1.0.1";
         public const string RoleModName = "ClassicUsFreezer";
 
         public static string FreezerRoleName = "Freezer";
         public const string RpcSyncSettingsKey = "classicus.freezer.SyncSettings";
         public const string RequestFreezeKey = "classicus.freezer.RequestFreeze";
         public const string BroadcastFreezeKey = "classicus.freezer.BroadcastFreeze";
+        public const string RequestKillKey = "classicus.freezer.RequestKill";
 
         public static ManualLogSource Log;
 
@@ -117,7 +118,7 @@ namespace ClassicUs.FreezerMod
         {
             if (p == null || p.Data == null) return false;
             var role = p.Data.myRole;
-            return role != null && role.SafeTryCast<FreezerRole>() != null;
+            return role != null && role.GetIl2CppType().Name == "FreezerRole";
         }
     }
 }

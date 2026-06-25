@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ClassicUs.Manactor;
 using HarmonyLib;
 using Il2CppInterop.Runtime;
+using Il2CppInterop.Runtime.InteropTypes.Arrays;
 using TMPro;
 using UnityEngine;
 using UnityEngine.Events;
@@ -99,6 +100,19 @@ namespace ClassicUs.FreezerMod
 
             try { FreezeEffectManager.Tick(); }
             catch (Exception e) { FreezerPlugin.Log.LogError("FreezeEffectManager.Tick: " + e); }
+
+            try { FreezerRoleEnforcer.Tick(__instance); }
+            catch (Exception e) { FreezerPlugin.Log.LogError("FreezerRoleEnforcer.Tick: " + e); }
+        }
+    }
+
+    [HarmonyPatch(typeof(HudManager), nameof(HudManager.Start))]
+    internal static class HudManager_Start_Patch
+    {
+        private static void Prefix()
+        {
+            FreezeButton.Reset();
+            FreezeEffectManager.Reset();
         }
     }
 
@@ -114,7 +128,7 @@ namespace ClassicUs.FreezerMod
                 if (rm.allRoles != null)
                 {
                     foreach (var r in rm.allRoles)
-                        if (r != null && r.SafeTryCast<FreezerRole>() != null) return;
+                        if (r != null && r.GetIl2CppType().Name == "FreezerRole") return;
                 }
 
                 rm.AddRole(Il2CppType.Of<FreezerRole>(), FreezerPlugin.RoleModName);
@@ -123,7 +137,7 @@ namespace ClassicUs.FreezerMod
 
                 foreach (var role in rm.allRoles)
                 {
-                    if (role != null && role.SafeTryCast<FreezerRole>() != null)
+                    if (role != null && role.GetIl2CppType().Name == "FreezerRole")
                     {
                         FreezerPlugin.FreezerRoleName = role.roleCodeName;
                         break;
@@ -137,62 +151,15 @@ namespace ClassicUs.FreezerMod
         }
     }
 
-    [HarmonyPatch(typeof(RoleBehaviour), nameof(RoleBehaviour.SetTarget))]
-    internal static class RoleBehaviour_SetTarget_Patch
-    {
-        private const float KillRange = 2.5f;
 
-        private static bool Prefix(RoleBehaviour __instance)
-        {
-            var local = PlayerControl.LocalPlayer;
-            if (local == null || local.Data == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
 
-            var killButton = HudManager.InstanceExists ? HudManager.Instance.KillButton : null;
-            if (killButton == null) return false;
-
-            try
-            {
-                PlayerControl best = null;
-                float bestDist = KillRange;
-                var localPos = local.GetTruePosition();
-
-                foreach (var p in PlayerControl.AllPlayerControls)
-                {
-                    if (p == null || p == local || p.Data == null) continue;
-                    if (p.Data.IsDead || p.Data.Disconnected) continue;
-                    if (RoleManager.IsTeam(p.Data, RoleTeamTypes.Impostor)) continue;
-
-                    float dist = Vector2.Distance(localPos, p.GetTruePosition());
-                    if (dist < bestDist)
-                    {
-                        bestDist = dist;
-                        best = p;
-                    }
-                }
-
-                killButton.CurrentTarget = best;
-            }
-            catch (Exception e)
-            {
-                FreezerPlugin.Log.LogError("Freezer SetTarget: " + e);
-            }
-
-            return false;
-        }
-    }
 
     [HarmonyPatch(typeof(RoleBehaviour), nameof(RoleBehaviour.OnAssign))]
     internal static class RoleBehaviour_OnAssign_Patch
     {
-        private static void Prefix(RoleBehaviour __instance, PlayerControl player) => Apply(__instance);
-
-        private static void Postfix(RoleBehaviour __instance, PlayerControl player) => Apply(__instance);
-
-        public static void Apply(RoleBehaviour __instance)
+        private static void Postfix(RoleBehaviour __instance, PlayerControl player)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return;
-            var client = AmongUsClient.Instance;
-            if (client != null && client.GameMode == GameModes.FreePlay) return;
+            if (__instance == null || __instance.GetIl2CppType().Name != "FreezerRole") return;
             try
             {
                 __instance.RoleTeamType = RoleTeamTypes.Impostor;
@@ -200,8 +167,9 @@ namespace ClassicUs.FreezerMod
                 __instance.CanVent = true;
                 __instance.CanSabotage = true;
 
-                if (HudManager.InstanceExists && HudManager.Instance.KillButton != null)
-                    HudManager.Instance.KillButton.gameObject.SetActive(true);
+                var enemies = new Il2CppStructArray<RoleTeamTypes>(1);
+                enemies[0] = RoleTeamTypes.Crewmate;
+                __instance.enemyTeams = enemies;
             }
             catch (Exception e)
             {
@@ -210,25 +178,63 @@ namespace ClassicUs.FreezerMod
         }
     }
 
-    [HarmonyPatch(typeof(RoleBehaviour), nameof(RoleBehaviour.roleDisplayName), MethodType.Getter)]
-    internal static class RoleBehaviour_DisplayName_Patch
+    [HarmonyPatch(typeof(PlayerControl), nameof(PlayerControl.CheckMurder))]
+    internal static class PlayerControl_CheckMurder_Patch
     {
-        private static bool Prefix(RoleBehaviour __instance, ref string __result)
+        private static bool Prefix(PlayerControl __instance, PlayerControl t)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
-            __result = "Freezer";
+            FreezerPlugin.Log.LogInfo($"[Freezer] CheckMurder Prefix: local={(__instance == PlayerControl.LocalPlayer)} sender={__instance.Data?.PlayerName} (IsFreezer={FreezerPlugin.IsFreezer(__instance)}) target={t?.Data?.PlayerName}");
+            if (!FreezerPlugin.IsFreezer(__instance)) return true;
+            if (t == null || t.Data == null || t.Data.IsDead) return false;
+            try
+            {
+                var client = AmongUsClient.Instance;
+                FreezerPlugin.Log.LogInfo($"[Freezer] CheckMurder: AmHost={client?.AmHost}");
+                if (client != null && client.AmHost)
+                {
+                    FreezeLogic.ResolveFreezerKill(__instance, t);
+                }
+                else if (__instance == PlayerControl.LocalPlayer)
+                {
+                    FreezerPlugin.Log.LogInfo($"[Freezer] CheckMurder: Sending RequestKill RPC to host for target {t.Data.PlayerId}");
+                    ManactorAPI.SendRpcMethod(FreezerPlugin.RequestKillKey, t.Data.PlayerId);
+                }
+            }
+            catch (Exception e)
+            {
+                FreezerPlugin.Log.LogError("Freezer CheckMurder: " + e);
+            }
             return false;
         }
     }
 
-    [HarmonyPatch(typeof(RoleBehaviour), nameof(RoleBehaviour.roleDescription), MethodType.Getter)]
+    [HarmonyPatch(typeof(ImpostorRole), nameof(ImpostorRole.roleDisplayName), MethodType.Getter)]
+    internal static class RoleBehaviour_DisplayName_Patch
+    {
+        private static bool Prefix(RoleBehaviour __instance, ref string __result)
+        {
+            if (__instance == null) return true;
+            if (__instance.GetIl2CppType().Name == "FreezerRole")
+            {
+                __result = "Freezer";
+                return false;
+            }
+            return true;
+        }
+    }
+
+    [HarmonyPatch(typeof(ImpostorRole), nameof(ImpostorRole.roleDescription), MethodType.Getter)]
     internal static class RoleBehaviour_Description_Patch
     {
         private static bool Prefix(RoleBehaviour __instance, ref string __result)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
-            __result = "You are a Freezer. Press the freeze button to freeze every player for a few seconds.";
-            return false;
+            if (__instance == null) return true;
+            if (__instance.GetIl2CppType().Name == "FreezerRole")
+            {
+                __result = "You are a Freezer. Press the freeze button to freeze every player for a few seconds.";
+                return false;
+            }
+            return true;
         }
     }
 
@@ -237,9 +243,13 @@ namespace ClassicUs.FreezerMod
     {
         private static bool Prefix(RoleBehaviour __instance, ref string __result)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
-            __result = "Freeze everyone for a few seconds";
-            return false;
+            if (__instance == null) return true;
+            if (__instance.GetIl2CppType().Name == "FreezerRole")
+            {
+                __result = "Freeze everyone for a few seconds";
+                return false;
+            }
+            return true;
         }
     }
 
@@ -248,9 +258,13 @@ namespace ClassicUs.FreezerMod
     {
         private static bool Prefix(RoleBehaviour __instance, ref Color __result)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
-            __result = new Color(0.3f, 0.7f, 1f, 1f);
-            return false;
+            if (__instance == null) return true;
+            if (__instance.GetIl2CppType().Name == "FreezerRole")
+            {
+                __result = new Color(0.3f, 0.7f, 1f, 1f);
+                return false;
+            }
+            return true;
         }
     }
 
@@ -259,9 +273,13 @@ namespace ClassicUs.FreezerMod
     {
         private static bool Prefix(RoleBehaviour __instance, ref AudioClip __result)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
-            __result = null;
-            return false;
+            if (__instance == null) return true;
+            if (__instance.GetIl2CppType().Name == "FreezerRole")
+            {
+                __result = null;
+                return false;
+            }
+            return true;
         }
     }
 
@@ -270,9 +288,13 @@ namespace ClassicUs.FreezerMod
     {
         private static bool Prefix(RoleBehaviour __instance, ref string __result)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
-            __result = string.Empty;
-            return false;
+            if (__instance == null) return true;
+            if (__instance.GetIl2CppType().Name == "FreezerRole")
+            {
+                __result = string.Empty;
+                return false;
+            }
+            return true;
         }
     }
 
@@ -281,9 +303,13 @@ namespace ClassicUs.FreezerMod
     {
         private static bool Prefix(RoleBehaviour __instance, ref string __result)
         {
-            if (__instance == null || __instance.SafeTryCast<FreezerRole>() == null) return true;
-            __result = "Freeze";
-            return false;
+            if (__instance == null) return true;
+            if (__instance.GetIl2CppType().Name == "FreezerRole")
+            {
+                __result = "Kill";
+                return false;
+            }
+            return true;
         }
     }
 
@@ -296,7 +322,7 @@ namespace ClassicUs.FreezerMod
             try
             {
                 var role = exiled.myRole;
-                if (role == null || role.SafeTryCast<FreezerRole>() == null) return;
+                if (role == null || role.GetIl2CppType().Name != "FreezerRole") return;
 
                 string text = $"{exiled.PlayerName} was the Freezer.";
                 if (__instance.Text != null) __instance.Text.Text = text;
@@ -319,7 +345,7 @@ namespace ClassicUs.FreezerMod
             try
             {
                 var role = ctrl.exiled.myRole;
-                if (role == null || role.SafeTryCast<FreezerRole>() == null) return;
+                if (role == null || role.GetIl2CppType().Name != "FreezerRole") return;
 
                 ctrl.completeString = $"{ctrl.exiled.PlayerName} was the Freezer.";
             }
@@ -335,7 +361,7 @@ namespace ClassicUs.FreezerMod
     {
         private static void Postfix(RoleBehaviour role, ref Color __result)
         {
-            if (role != null && role.SafeTryCast<FreezerRole>() != null)
+            if (role != null && role.GetIl2CppType().Name == "FreezerRole")
                 __result = new Color(0.3f, 0.7f, 1f, 1f);
         }
     }
@@ -478,6 +504,20 @@ namespace ClassicUs.FreezerMod
                 ManactorAPI.SendRpcMethod(FreezerPlugin.RequestFreezeKey);
             }
         }
+
+        public static void Reset()
+        {
+            if (_buttonGo != null)
+            {
+                UnityEngine.Object.Destroy(_buttonGo);
+                _buttonGo = null;
+            }
+            _renderer = null;
+            _cooldownText = null;
+            _passiveButton = null;
+            _cooldownRemaining = 0f;
+            _effectRemaining = 0f;
+        }
     }
 
     internal static class FreezeLogic
@@ -513,6 +553,49 @@ namespace ClassicUs.FreezerMod
         private static void OnBroadcastFreeze(byte senderId, float duration, byte freezerId)
         {
             FreezeEffectManager.ApplyFreeze(duration, freezerId);
+        }
+
+        [ManactorRpc(FreezerPlugin.RequestKillKey)]
+        private static void OnFreezerKillRequest(byte senderId, byte targetPlayerId)
+        {
+            FreezerPlugin.Log.LogInfo($"[Freezer] OnFreezerKillRequest: senderId={senderId} targetPlayerId={targetPlayerId}");
+            var client = AmongUsClient.Instance;
+            if (client == null || !client.AmHost) return;
+
+            PlayerControl freezer = null, target = null;
+            foreach (var p in PlayerControl.AllPlayerControls)
+            {
+                if (p == null || p.Data == null) continue;
+                if (p.Data.PlayerId == senderId) freezer = p;
+                if (p.Data.PlayerId == targetPlayerId) target = p;
+            }
+
+            FreezerPlugin.Log.LogInfo($"[Freezer] OnFreezerKillRequest: freezer found={freezer != null} (IsFreezer={FreezerPlugin.IsFreezer(freezer)}) target found={target != null}");
+            if (freezer == null || target == null || !FreezerPlugin.IsFreezer(freezer)) return;
+            ResolveFreezerKill(freezer, target);
+        }
+
+        public static void ResolveFreezerKill(PlayerControl freezer, PlayerControl target)
+        {
+            FreezerPlugin.Log.LogInfo($"[Freezer] ResolveFreezerKill: killer={freezer?.Data?.PlayerName} victim={target?.Data?.PlayerName}");
+            if (freezer == null || freezer.Data == null) return;
+            if (target == null || target.Data == null || target.Data.IsDead) return;
+
+            try
+            {
+                FreezerPlugin.Log.LogInfo($"[Freezer] ResolveFreezerKill: Invoking RpcMurderPlayer");
+                freezer.RpcMurderPlayer(target, MurderResultFlags.Succeeded);
+                var role = freezer.Data.myRole;
+                if (role != null)
+                {
+                    float cooldown = role.KillCooldown;
+                    role.SetKillTimer(cooldown);
+                }
+            }
+            catch (Exception e)
+            {
+                FreezerPlugin.Log.LogError("ResolveFreezerKill: " + e);
+            }
         }
     }
 
@@ -606,6 +689,33 @@ namespace ClassicUs.FreezerMod
             foreach (var kv in _effects)
                 if (kv.Value != null) UnityEngine.Object.Destroy(kv.Value);
             _effects.Clear();
+        }
+
+        public static void Reset()
+        {
+            ClearAllEffects();
+            foreach (var p in PlayerControl.AllPlayerControls)
+                if (p != null) p.moveable = true;
+            _unfreezeAt = -1f;
+        }
+    }
+
+    internal static class FreezerRoleEnforcer
+    {
+        public static void Tick(HudManager hud)
+        {
+            var local = PlayerControl.LocalPlayer;
+            if (local == null || local.Data == null || !FreezerPlugin.IsFreezer(local)) return;
+            if (local.Data.IsDead) return;
+
+            var role = local.Data.myRole;
+            if (role != null)
+            {
+                if (role.RoleTeamType != RoleTeamTypes.Impostor) role.RoleTeamType = RoleTeamTypes.Impostor;
+                if (!role.CanUseKillButton) role.CanUseKillButton = true;
+                if (!role.CanVent) role.CanVent = true;
+                if (!role.CanSabotage) role.CanSabotage = true;
+            }
         }
     }
 
