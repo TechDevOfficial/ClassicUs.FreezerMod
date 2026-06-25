@@ -24,9 +24,10 @@ namespace ClassicUs.FreezerMod
                 float rightShift = (worldBounds.size.y > 0f ? worldBounds.size.y : 0.3f) * 0.23f;
 
                 float baseY = worldBounds.min.y;
-                foreach (Transform child in versionText.transform)
+                for (int i = 0; i < versionText.transform.childCount; i++)
                 {
-                    if (!child.name.EndsWith("ModVersion")) continue;
+                    var child = versionText.transform.GetChild(i);
+                    if (child == null || !child.name.EndsWith("ModVersion")) continue;
                     var childRend = child.GetComponent<MeshRenderer>();
                     if (childRend != null) baseY = Mathf.Min(baseY, childRend.bounds.min.y);
                 }
