@@ -283,7 +283,7 @@ namespace ClassicUs.FreezerMod
     [HarmonyPatch(typeof(ExileController), nameof(ExileController.Begin))]
     internal static class ExileController_Begin_Patch
     {
-        private static void Postfix(ExileController __instance, GameData.PlayerInfo exiled, bool tie)
+        private static void Prefix(ExileController __instance, GameData.PlayerInfo exiled, bool tie)
         {
             if (__instance == null || exiled == null) return;
             try
