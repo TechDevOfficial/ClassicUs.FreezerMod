@@ -199,6 +199,9 @@ namespace ClassicUs.FreezerMod
                 __instance.CanUseKillButton = true;
                 __instance.CanVent = true;
                 __instance.CanSabotage = true;
+
+                if (HudManager.InstanceExists && HudManager.Instance.KillButton != null)
+                    HudManager.Instance.KillButton.gameObject.SetActive(true);
             }
             catch (Exception e)
             {
